@@ -6,21 +6,79 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(ggplot2)
 ```
 
-## 
-
-```{r}
-
+## Problem 2
+Import Data:
+```{r, warning=FALSE, message=FALSE}
+homicides_US = read_csv("homicide-data.csv") %>% 
+  janitor::clean_names() 
 ```
 
-## 
+The dataset includes `r ncol(homicides_US)` variables, including `r ls(homicides_US)`. There are `r nrow(homicides_US)` observations in total. 
 
+Let's look at the total number of homicides and the number of unsolved homicides for each city.
+```{r, warning=FALSE}
+homicides_US = 
+  homicides_US %>% 
+  mutate(city_state = str_c(city, state, sep = ","))
 
+total_and_unsolved = homicides_US %>% 
+    group_by(city_state) %>% 
+    mutate(
+      desposition_log1 = ifelse(disposition == "Closed without arrest", 1, 0),
+      desposition_log2 = ifelse(disposition == "Open/No arrest", 1, 0)) %>% 
+  summarise(
+    total_n_homicides = n(),
+    N_unsolved_homicides = sum(desposition_log1) + sum(desposition_log2)
+  )
 
-```{r}
+total_and_unsolved %>% knitr::kable()
+```
 
+Now let's look at the proportion of homicides that are unsolved in Baltimore,MD. 
+```{r, warning=FALSE}
+Bal_ptest = 
+  total_and_unsolved %>%
+  filter(city_state == "Baltimore,MD") %>% 
+  mutate(p_test = prop.test(N_unsolved_homicides, total_n_homicides) %>% 
+           broom::tidy()) %>% 
+  unnest() %>% 
+  select(city_state, estimate, conf.low, conf.high)
+
+Bal_ptest %>% knitr::kable()
+```
+
+Run `Prop.test` for each of the cities. 
+```{r, warning=FALSE}
+prop_test = function(df) {
+  p_test = prop.test(df$N_unsolved_homicides, df$total_n_homicides) %>% 
+           broom::tidy() %>% 
+           unnest() %>% 
+           select(estimate, conf.low, conf.high)
+  
+  p_test
+}
+
+allcity_ptest = 
+  total_and_unsolved %>% 
+  nest(data = total_n_homicides:N_unsolved_homicides) %>% 
+  mutate(p_test = map(data, prop_test)) %>% 
+  unnest(data, p_test)
+```
+
+Make a plot to visualize the proportion of unsolved homicides for each city. 
+```{r, warning=FALSE}
+allcity_ptest %>% 
+  mutate(city_state = fct_reorder(city_state, estimate)) %>%  
+  ggplot(aes(x = city_state, y = estimate)) + 
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 1) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.7))
 ```
 
 
