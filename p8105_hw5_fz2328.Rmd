@@ -82,3 +82,107 @@ allcity_ptest %>%
 ```
 
 
+## Problem 3
+Generate 5000 datasets from the model x ~ Normal[0, 50]
+```{r}
+sim_mean = function(n_obs = 30, mu, sigma = 5) {
+    
+  x = rnorm(n_obs, mean = mu, sd = sigma)
+  
+  x}
+
+
+sim_results_df = 
+  expand_grid(
+    true_mean = 0,
+    iter = 1:5000
+  ) %>% 
+  mutate(
+    estimate_df = map(true_mean, ~ sim_mean(mu = .x)),
+    t_test = map(estimate_df, ~ t.test(x = .x) %>% 
+          broom::tidy()) 
+  ) %>% 
+  unnest(t_test) %>% 
+  mutate(mu_hat = estimate,
+        p_value = p.value) %>% 
+  select(true_mean, iter, mu_hat, p_value)
+
+head(sim_results_df)
+```
+
+let's repeat it for mu = {1,2,3,4,5,6}. 
+```{r}
+all_mean_sim = expand_grid(
+    true_mean = c(1, 2, 3, 4, 5, 6),  
+    iter = 1:5000
+  ) %>% 
+  mutate(
+    estimate_df = map(true_mean, ~ sim_mean(mu = .x)),
+    t_test = map(estimate_df, ~ t.test(x = .x) %>% 
+          broom::tidy()) 
+  ) %>% 
+  unnest(t_test) %>% 
+  mutate(mu_hat = estimate,
+        p_value = p.value) %>% 
+  select(true_mean, iter, mu_hat, p_value)
+
+head(all_mean_sim)
+```
+
+Let's look at the proportion of times the null was rejected for each true_mean group. 
+```{r, warning=FALSE, message= FALSE}
+proportion_reject_null =
+  all_mean_sim %>% 
+  mutate(reject_null = ifelse(p_value < 0.05 | p_value == 0.05, 1, 0)) %>% 
+  group_by(true_mean) %>% 
+  summarise(proportion_reject_null = sum(reject_null)/5000)
+
+proportion_reject_null %>% 
+  ggplot(aes(x = true_mean, y = proportion_reject_null)) + 
+  geom_point() +
+  geom_smooth() +
+  scale_x_continuous(breaks = c(0, 1, 2, 3, 4, 5, 6))
+```
+  
+We can see that the the power increase as the true_mean increase, implying that effect size and power are positively associated. 
+
+Let's look at the average estimate of mu_hat.
+```{r, warning=FALSE, message= FALSE}
+average_mu_hat = 
+  all_mean_sim %>%
+  mutate(reject_null = ifelse(p_value < 0.05 | p_value == 0.05, 1, 0)) %>% 
+  group_by(true_mean) %>%
+  summarise(average_mu_hat = mean(mu_hat), 
+            average_mu_hat_reject = mean(mu_hat[reject_null == 1]))
+
+
+average_mu_hat %>% 
+  ggplot(aes(x = true_mean)) +
+  geom_point(aes(y = average_mu_hat, color = "all samples")) + 
+  geom_smooth(aes(y = average_mu_hat, color = "all samples")) +
+  geom_point(aes(y = average_mu_hat_reject, color = "samples for which the null was rejected")) +
+  geom_smooth(aes(y = average_mu_hat_reject, color = "samples for which the null was rejected")) +
+  scale_x_continuous(breaks = c(0, 1, 2, 3, 4, 5, 6)) +
+  theme(legend.position = "bottom")
+```
+
+The sample average of mu_hat across tests for which the null is rejected approximately equal to the true value of mu when the true_mean is greater than or equal to 4, but they are not equal when the true_mean is less than 4. This is because the power of the test is the greatest when the true_mean is greater than or equal to 4, meaning that the proportions of times the null was rejected are large, so the average of mu_hat across tests for which the null is rejected would approximate the true_mean. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
